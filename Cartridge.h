@@ -22,7 +22,16 @@ public:
 	bool ppuRead(uint16_t address, uint8_t& data);
 	bool ppuWrite(uint16_t address, uint8_t data);
 
+public:
+	bool ImageValid();
+	enum MIRROR {
+		HORIZONTAL,
+		VERTICAL,
+		ONESCREEN_LO,
+		ONESCREEN_HI
+	} mirror = HORIZONTAL;
 private:
+	bool bImageValid = false;
 	std::vector<uint8_t> vPRGmem;
 	std::vector<uint8_t> vCHRmem;
 	uint8_t nMapperID = 0;

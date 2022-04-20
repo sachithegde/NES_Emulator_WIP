@@ -41,10 +41,13 @@ bool Mapper_000::ppuMapRead(uint16_t address, uint32_t& mapped_address)
 
 bool Mapper_000::ppuMapWrite(uint16_t address, uint32_t& mapped_address)
 {
-	/*if (address >= 0x0000 && address <= 0x1FFF)
+	if (address >= 0x0000 && address <= 0x1fff)
 	{
-		mapped_address = address;
-		return true;
-	}*/
+		if (nCHRBanks == 0)
+		{
+			mapped_address = address;
+			return true;
+		}
+	}
 	return false;
 }

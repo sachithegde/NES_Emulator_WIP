@@ -13,7 +13,7 @@ Cartridge::Cartridge(const std::string& sFileName)
 		uint8_t tv_system1;
 		uint8_t tv_system2;
 		
-		char uunused[5];
+		char unused[5];
 
 
 	} header;
@@ -30,6 +30,7 @@ Cartridge::Cartridge(const std::string& sFileName)
 		}
 
 		nMapperID = ((header.mapper2 >> 4) << 4) | (header.mapper1 >> 4);
+		mirror = (header.mapper1 & 0x01) ? VERTICAL : HORIZONTAL;
 
 		uint8_t nFileType = 1;
 
@@ -73,9 +74,14 @@ Cartridge::~Cartridge()
 
 }
 
+bool Cartridge::ImageValid()
+{
+	return bImageValid;
+}
+
 bool Cartridge::cpuRead(uint16_t address, uint8_t& data)
 {
-	uint32_t mapper_address = 0;
+	uint32_t mapper_address = 0x00;
 	if (pMapper->cpuMapRead(address, mapper_address))
 	{
 		data = vPRGmem[mapper_address];
@@ -118,7 +124,7 @@ bool Cartridge::ppuRead(uint16_t address, uint8_t& data)
 bool Cartridge::ppuWrite(uint16_t address, uint8_t data)
 {
 	uint32_t mapper_address = 0;
-	if (pMapper->ppuMapWrite(address, mapper_address))
+	if (pMapper->ppuMapRead(address, mapper_address))
 	{
 		vCHRmem[mapper_address] = data;
 		return true;

@@ -19,6 +19,8 @@ public:
 
 	bool bEmulationRun = false;
 	float fResidualTime = 0.0f;
+
+	uint8_t nSelectedPalette;
 	std::map<uint16_t, std::string> mapAsm;
 
 	std::string hex(uint32_t n, uint8_t d)
@@ -110,6 +112,10 @@ public:
 
 	bool OnUserUpdate(float fElapsedTime)
 	{
+		Clear(olc::DARK_BLUE);
+
+
+
 		if (bEmulationRun)
 		{
 			if (fResidualTime > 0.0f)
@@ -149,12 +155,33 @@ public:
 
 		if (GetKey(olc::Key::SPACE).bPressed) bEmulationRun = !bEmulationRun;
 		if (GetKey(olc::Key::R).bPressed) nes.reset();
-
+		if (GetKey(olc::Key::P).bPressed) (++nSelectedPalette) &= 0x07;
 		DrawCpu(516, 2);
 		DrawCode(516, 72, 26);
 
+		const int nSwatchSize = 6;
+		for (int p = 0; p < 8; p++) // For each palette
+			for (int s = 0; s < 4; s++) // For each index
+				FillRect(516 + p * (nSwatchSize * 5) + s * nSwatchSize, 340,
+					nSwatchSize, nSwatchSize, nes.ppu.GetColorFromPallete(p, s));
+
+		// Draw selection reticule around selected palette
+		DrawRect(516 + nSelectedPalette * (nSwatchSize * 5) - 1, 339, (nSwatchSize * 4), nSwatchSize, olc::WHITE);
+
+		DrawSprite(516, 348, &nes.ppu.GetPatternTable(0, nSelectedPalette));
+		DrawSprite(648, 348, &nes.ppu.GetPatternTable(1, nSelectedPalette));
+
 		DrawSprite(0, 0, &nes.ppu.GetScreen(), 2);
-		return true;
+
+		for (uint8_t y = 0; y < 30; y++)
+		{
+			for (uint8_t x = 0; x < 32; x++)
+			{
+				uint8_t id = (uint8_t)nes.ppu.NameTable[0][1];
+				std::cout << "ID: " << id << std::endl;
+				//DrawPartialSprite(x * 16, y * 16, &nes.ppu.GetPatternTable(0, nSelectedPalette), (id & 0x0F) << 3, ((id >> 4) & 0x0F) << 3, 8, 8, 2);
+			}
+		}
 
 		return true;
 	}
@@ -167,7 +194,7 @@ public:
 int main()
 {
 	Demo_c6502 demo;
-	demo.Construct(680, 480, 2, 2);
+	demo.Construct(780, 480, 2, 2);
 	demo.Start();
 	return 0;
 }

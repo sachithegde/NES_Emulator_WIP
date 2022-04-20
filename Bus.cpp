@@ -44,14 +44,14 @@ uint8_t Bus::cpuRead(uint16_t address, bool bReadOnly)
 	}
 	else if (address >= 0x0000 && address <= 0x1FFF)
 	{
-		return cpuRam[address & 0x07FF];
+		data = cpuRam[address & 0x07FF];
 	}
 	else if (address >= 0x2000 && address <= 0x3FFF)
 	{
-		ppu.cpuRead(address & 0x0007, bReadOnly);
+		data = ppu.cpuRead(address & 0x0007, bReadOnly);
 	}
 
-	return 0x00;
+	return data;
 }
 
 void Bus::InsertCartridge(const std::shared_ptr<Cartridge>& cartridge)
@@ -68,5 +68,16 @@ void Bus::reset()
 
 void Bus::clock()
 {
+	ppu.clock();
+	if (nSystemClockCounter % 3 == 0)
+	{
+		cpu.clock();
+	}
 
+	if (ppu.nmi)
+	{
+		ppu.nmi = false;
+		cpu.nmi();
+	}
+	nSystemClockCounter++;
 }

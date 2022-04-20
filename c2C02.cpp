@@ -87,14 +87,41 @@ olc::Sprite& c2C02::GetNameTable(uint8_t i)
 	return sprNameTable[i];
 }
 
-olc::Sprite& c2C02::GetPatternTable(uint8_t i)
+olc::Sprite& c2C02::GetPatternTable(uint8_t i, uint8_t palette)
 {
+	for (uint16_t nTileY = 0; nTileY < 16; nTileY++)
+	{
+		for (uint16_t nTileX = 0; nTileX < 16; nTileX++)
+		{
+			uint16_t nOffset = nTileY * 256 + nTileX * 16;
+
+			for (uint16_t row = 0; row < 8; row++)
+			{
+				uint8_t tile_lsb = ppuRead(i * 0x1000 + nOffset + row + 0x0000);
+				uint8_t tile_msb = ppuRead(i * 0x1000 + nOffset + row + 0x0008);
+				for (uint16_t col = 0; col < 8; col++)
+				{
+					uint8_t pixel = (tile_lsb & 0x01) + (tile_msb & 0x01);
+					tile_lsb >>= 1;
+					tile_msb >>= 1;
+
+					sprPatternTable[i].SetPixel(nTileX * 8 + (7 - col), nTileY * 8 + row, GetColorFromPallete(palette, pixel));
+				}
+			}
+		}
+
+	}
 	return sprPatternTable[i];
 }
 
-uint8_t c2C02::cpuRead(uint16_t address, bool readonly = false)
+olc::Pixel& c2C02::GetColorFromPallete(uint8_t palette, uint8_t pixel)
 {
-	uint8_t data;
+	return palScreen[ppuRead(0x3F00 + (palette << 2) + pixel)];
+}
+
+uint8_t c2C02::cpuRead(uint16_t address, bool readonly)
+{
+	uint8_t data = 0x00;
 	
 	switch (address)
 	{
@@ -103,6 +130,9 @@ uint8_t c2C02::cpuRead(uint16_t address, bool readonly = false)
 	case 0x0001: // Mask
 		break;
 	case 0x0002: // Status
+		data = (status.reg & 0xE0) | (ppu_data_buffer & 0x1F);
+		status.vertical_blank = 0;
+		address_latch = 0x00;
 		break;
 	case 0x0003: // OAM Address
 		break;
@@ -113,6 +143,11 @@ uint8_t c2C02::cpuRead(uint16_t address, bool readonly = false)
 	case 0x0006: // PPU Address
 		break;
 	case 0x0007: // PPU Data
+		data = ppu_data_buffer;
+		ppu_data_buffer = ppuRead(ppu_address);
+
+		if (ppu_address > 0x3F00) data = ppu_data_buffer;
+		ppu_address++;
 		break;
 	}
 
@@ -124,8 +159,10 @@ void c2C02::cpuWrite(uint16_t address, uint8_t data)
 	switch (address)
 	{
 	case 0x0000: // Control
+		control.reg = data;
 		break;
 	case 0x0001: // Mask
+		mask.reg = data;
 		break;
 	case 0x0002: // Status
 		break;
@@ -136,14 +173,26 @@ void c2C02::cpuWrite(uint16_t address, uint8_t data)
 	case 0x0005: // Scroll
 		break;
 	case 0x0006: // PPU Address
+		if (address_latch == 0x00)
+		{
+			ppu_address = (ppu_address & 0x00FF) | (data << 8);
+			address_latch = 0x01;
+		}
+		else
+		{
+			ppu_address = (ppu_address & 0xFF00) | data;
+			address_latch = 0x00;
+		}
 		break;
 	case 0x0007: // PPU Data
+		ppuWrite(ppu_address, data);
+		ppu_address++;
 		break;
 	}
 
 }
 
-uint8_t c2C02::ppuRead(uint16_t address, bool readonly = false)
+uint8_t c2C02::ppuRead(uint16_t address, bool readonly)
 {
 	uint8_t data = 0x00;
 	address &= 0x3FFF;
@@ -151,6 +200,58 @@ uint8_t c2C02::ppuRead(uint16_t address, bool readonly = false)
 	if (cartridge->ppuRead(address, data))
 	{
 
+	}
+	else if (address >= 0x0000 && address <= 0x1FFF)
+	{
+		data = PatternTable[(address & 0x1000) >> 12][address & 0x0FFF];
+	}
+	else if (address >= 0x2000 && address <= 0x3EFF)
+	{
+		if (cartridge->mirror == Cartridge::MIRROR::VERTICAL)
+		{
+			if (address >= 0x0000 && address <= 0x03FF)
+				data = NameTable[0][address & 0x03FF];
+			if (address >= 0x0400 && address <= 0x07FF)
+				data = NameTable[1][address & 0x03FF];
+			if (address >= 0x0800 && address <= 0x0BFF)
+				data = NameTable[0][address & 0x03FF];
+			if (address >= 0x0C00 && address <= 0x0FFF)
+				data = NameTable[1][address & 0x03FF];
+		}
+		else if (cartridge->mirror == Cartridge::MIRROR::HORIZONTAL)
+		{
+			// Horizontal
+			if (address >= 0x0000 && address <= 0x03FF)
+				data = NameTable[0][address & 0x03FF];
+			if (address >= 0x0400 && address <= 0x07FF)
+				data = NameTable[0][address & 0x03FF];
+			if (address >= 0x0800 && address <= 0x0BFF)
+				data = NameTable[1][address & 0x03FF];
+			if (address >= 0x0C00 && address <= 0x0FFF)
+				data = NameTable[1][address & 0x03FF];
+		}
+	}
+	else if (address >= 0x3F00 && address <= 0x3FFF)
+	{
+		address &= 0x001F;
+		if (address == 0x0010)
+		{
+			address = 0x0000;
+		}
+		if (address == 0x0014)
+		{
+			address = 0x0004;
+		}
+		if (address == 0x0018)
+		{
+			address = 0x0008;
+		}
+		if (address == 0x001C)
+		{
+			address = 0x000C;
+		}
+
+		data = PaletteTable[address];
 	}
 
 	return data;
@@ -163,6 +264,58 @@ void c2C02::ppuWrite(uint16_t address, uint8_t data)
 	{
 
 	}
+	else if (address >= 0x0000 && address <= 0x1FFF)
+	{
+		PatternTable[(address & 0x1000) >> 12][address & 0x0FFF] = data;
+	}
+	else if (address >= 0x2000 && address <= 0x3EFF)
+	{
+		if (cartridge->mirror == Cartridge::MIRROR::VERTICAL)
+		{
+			if (address >= 0x0000 && address <= 0x03FF)
+				NameTable[0][address & 0x03FF] = data;
+			if (address >= 0x0400 && address <= 0x07FF)
+				NameTable[1][address & 0x03FF] = data;
+			if (address >= 0x0800 && address <= 0x0BFF)
+				NameTable[0][address & 0x03FF] = data;
+			if (address >= 0x0C00 && address <= 0x0FFF)
+				NameTable[1][address & 0x03FF] = data;
+		}
+		else if (cartridge->mirror == Cartridge::MIRROR::HORIZONTAL)
+		{
+			// Horizontal
+			if (address >= 0x0000 && address <= 0x03FF)
+				NameTable[0][address & 0x03FF] = data;
+			if (address >= 0x0400 && address <= 0x07FF)
+				NameTable[0][address & 0x03FF] = data;
+			if (address >= 0x0800 && address <= 0x0BFF)
+				NameTable[1][address & 0x03FF] = data;
+			if (address >= 0x0C00 && address <= 0x0FFF)
+				NameTable[1][address & 0x03FF] = data;
+		}
+	}
+	else if (address >= 0x3F00 && address <= 0x3FFF)
+	{
+		address &= 0x001F;
+		if (address == 0x0010)
+		{
+			address = 0x0000;
+		}
+		if (address == 0x0014)
+		{
+			address = 0x0004;
+		}
+		if (address == 0x0018)
+		{
+			address = 0x0008;
+		}
+		if (address == 0x001C)
+		{
+			address = 0x000C;
+		}
+
+		PaletteTable[address] = data;
+	}
 }
 
 void c2C02::ConnectCartridge(const std::shared_ptr<Cartridge>& cartridge)
@@ -171,5 +324,29 @@ void c2C02::ConnectCartridge(const std::shared_ptr<Cartridge>& cartridge)
 }
 void c2C02::clock()
 {
+	if (scanline == -1 && cycle == 1)
+	{
+		status.vertical_blank = 0;
+	}
 
+	if (scanline == 241 && cycle == 1)
+	{
+		status.vertical_blank = 1;
+		if (control.enable_nmi)
+			nmi = true;
+	}
+	//sprScreen.SetPixel(cycle - 1, scanline, palScreen[(rand() % 2) ? 0x3F: 0x30]);
+	cycle++;
+
+	if (cycle >= 341)
+	{
+		cycle = 0;
+		scanline++;
+
+		if (scanline >= 261)
+		{
+			scanline = -1;
+			frame_complete = true;
+		}
+	}
 }
